@@ -1,0 +1,22 @@
+name: Sports Engine (Football + NBA)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-shift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests nba_api pandas
+      - env:
+          FB_TELEGRAM_TOKEN: ${{ secrets.FB_TELEGRAM_TOKEN }}
+          NBA_TELEGRAM_TOKEN: ${{ secrets.NBA_TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+        run: python sports_engine.py

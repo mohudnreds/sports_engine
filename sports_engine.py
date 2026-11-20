@@ -397,14 +397,14 @@ def run_nba_cycle():
     return live_cnt
 
 # ==========================================
-# 6. UNIFIED SHIFT RUNNER (AUTO-HANDOFF)
+# 6. UNIFIED SHIFT RUNNER (MANUAL STOP + 5.8H PING)
 # ==========================================
 start_ts = time.time()
-send_tg(FB_TOKEN, "🚀 <b>Shift Co-Pilot Online (Cloud)</b>\nScanning Football now, then auto-switching to NBA at 02:00 EET.")
+send_tg(FB_TOKEN, "🚀 <b>Sports Engine Online (Cloud)</b>\nScanning Football & NBA. Will ping at 5.8h if you want to re-trigger, or use Stop whenever you're done.")
 
 while True:
     if time.time() - start_ts > MAX_RUNTIME_SEC:
-        send_tg(FB_TOKEN, "⏱️ <b>Cloud Session Reached 5.8h Limit</b> — Tap iPhone button if late West Coast NBA games are still live.")
+        send_tg(FB_TOKEN, "⏱️ <b>5.8h Limit Reached</b> — Tap <b>Start Sports Engine</b> on your iPhone to continue.")
         break
 
     try:
@@ -412,10 +412,6 @@ while True:
         nba_live = run_nba_cycle()
         now_eet = datetime.now(EET)
         print(f"[{now_eet.strftime('%H:%M:%S')} EET] FB Live: {fb_live} | NBA Live: {nba_live}")
-
-        if now_eet.hour >= 4 and now_eet.minute >= 30 and fb_live == 0 and nba_live == 0:
-            send_tg(NBA_TOKEN, "✅ <b>All Football & NBA Games Finished — Cloud Runner Shutting Down</b>")
-            break
     except Exception as e:
         print(f"Loop error: {e}")
 

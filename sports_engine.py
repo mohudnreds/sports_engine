@@ -413,14 +413,9 @@ while True:
         now_eet = datetime.now(EET)
         print(f"[{now_eet.strftime('%H:%M:%S')} EET] FB Live: {fb_live} | NBA Live: {nba_live}")
 
-        # Auto-shutdown after 04:30 EET once both Football and NBA slates finish
         if now_eet.hour >= 4 and now_eet.minute >= 30 and fb_live == 0 and nba_live == 0:
             send_tg(NBA_TOKEN, "✅ <b>All Football & NBA Games Finished — Cloud Runner Shutting Down</b>")
             break
-    except Exception as e:
-        print(f"Loop error: {e}")
-
-    time.sleep(SCAN_INTERVAL_SEC)
     except Exception as e:
         print(f"Loop error: {e}")
 

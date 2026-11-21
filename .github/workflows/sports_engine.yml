@@ -19,7 +19,8 @@ jobs:
           NBA_TELEGRAM_TOKEN: ${{ secrets.NBA_TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
-        run: python sports_engine.py
+        run: python -u sports_engine.py
+
 concurrency:
   group: sports-engine-shift
   cancel-in-progress: true

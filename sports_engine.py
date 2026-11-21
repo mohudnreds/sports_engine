@@ -3,7 +3,6 @@ import re
 import time
 import requests
 from datetime import datetime, timezone, timedelta
-from nba_api.stats.endpoints import leaguedashplayerstats, leaguedashteamstats
 
 # ==========================================
 # 1. CONFIG & SECRETS
@@ -70,40 +69,84 @@ def post_sheet(payload):
 # ==========================================
 def load_nba_baselines():
     baselines, mults = {}, {}
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    # 1. Player season averages from ESPN (unblocked)
     try:
-        df = leaguedashplayerstats.LeagueDashPlayerStats(
-            season=NBA_SEASON, per_mode_detailed="PerGame", timeout=30
-        ).get_data_frames()[0]
-        for _, r in df.iterrows():
-            mpg = max(float(r["MIN"]), 1.0)
-            baselines[r["PLAYER_NAME"].strip().lower()] = {
-                "mpg": mpg, "ppg": float(r["PTS"]), "rpg": float(r["REB"]),
-                "pts_pm": float(r["PTS"]) / mpg, "reb_pm": float(r["REB"]) / mpg,
-                "tpm_pm": float(r["FG3M"]) / mpg,
-            }
-        tdf = leaguedashteamstats.LeagueDashTeamStats(
-            season=NBA_SEASON, measure_type_detailed_defense="Advanced", timeout=30
-        ).get_data_frames()[0]
-        avg_p, avg_d = tdf["PACE"].mean(), tdf["DEF_RATING"].mean()
-        for _, r in tdf.iterrows():
-            comb = (r["PACE"] / avg_p * 0.5) + (r["DEF_RATING"] / avg_d * 0.5)
-            mults[r["TEAM_NAME"].lower()] = round(max(0.93, min(1.07, comb)), 3)
+        base_url = (
+            "https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/"
+            "statistics/byathlete?region=us&lang=en&contentorigin=espn"
+            "&isqualified=false&limit=50&sort=offensive.avgPoints:desc&page={}"
+        )
+        cat_maps = {}
+        for page in range(1, 11):
+            r = requests.get(base_url.format(page), headers=headers, timeout=10).json()
+            if not cat_maps:
+                for cat in r.get("categories", []):
+                    cat_maps[cat["name"]] = (cat.get("names", []), cat.get("labels", []))
+            athletes = r.get("athletes", [])
+            if not athletes:
+                break
+            for item in athletes:
+                name = item.get("athlete", {}).get("displayName", "").strip().lower()
+                if not name:
+                    continue
+                stats = {}
+                for c in item.get("categories", []):
+                    names, labels = cat_maps.get(c.get("name", ""), ([], []))
+                    for i, v in enumerate(c.get("totals", [])):
+                        try:
+                            fv = float(str(v).replace(",", ""))
+                        except ValueError:
+                            continue
+                        if i < len(names):
+                            stats[names[i]] = fv
+                        if i < len(labels):
+                            stats[labels[i]] = fv
+                mpg = max(stats.get("avgMinutes", stats.get("MIN", 0.0)), 1.0)
+                ppg = stats.get("avgPoints", stats.get("PTS", 0.0))
+                rpg = stats.get("avgRebounds", stats.get("REB", 0.0))
+                tpm = stats.get("avgThreePointFieldGoalsMade", stats.get("3PM", 0.0))
+                if ppg > 0 or rpg > 0:
+                    baselines[name] = {
+                        "mpg": mpg, "ppg": ppg, "rpg": rpg,
+                        "pts_pm": ppg / mpg, "reb_pm": rpg / mpg,
+                        "tpm_pm": tpm / mpg,
+                    }
     except Exception as e:
-        print(f"NBA baseline warning: {e}")
+        print(f"NBA player baseline warning: {e}")
+
+    # 2. Team pace & defense multipliers from ESPN standings (1 request)
+    try:
+        st = requests.get(
+            "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings",
+            headers=headers, timeout=10
+        ).json()
+        teams_raw = []
+        for conf in st.get("children", []):
+            for entry in conf.get("standings", {}).get("entries", []):
+                tname = entry.get("team", {}).get("displayName", "").lower()
+                smap = {
+                    s["name"]: float(s["value"])
+                    for s in entry.get("stats", [])
+                    if isinstance(s.get("value"), (int, float))
+                }
+                pf = smap.get("avgPointsFor", 0.0)
+                pa = smap.get("avgPointsAgainst", 0.0)
+                if tname and pf > 0 and pa > 0:
+                    teams_raw.append((tname, pf + pa, pa))
+        if teams_raw:
+            avg_tot = sum(x[1] for x in teams_raw) / len(teams_raw)
+            avg_pa = sum(x[2] for x in teams_raw) / len(teams_raw)
+            for tname, tot, pa in teams_raw:
+                comb = (tot / avg_tot * 0.5) + (pa / avg_pa * 0.5)
+                mults[tname] = round(max(0.93, min(1.07, comb)), 3)
+    except Exception as e:
+        print(f"NBA team mult warning: {e}")
+
+    print(f"NBA Baselines Ready: {len(baselines)} players | {len(mults)} teams")
     return baselines, mults
 
-BASELINES, TEAM_MULTS = load_nba_baselines()
-
-def get_baseline(name):
-    key = name.strip().lower()
-    if key in BASELINES:
-        return BASELINES[key]
-    parts = key.split()
-    if parts:
-        for k, v in BASELINES.items():
-            if k.endswith(" " + parts[-1]):
-                return v
-    return None
 
 # ==========================================
 # 4. FOOTBALL MODULE (6 CORE + 3 WILDCARDS)

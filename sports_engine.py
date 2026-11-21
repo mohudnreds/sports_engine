@@ -1,72 +1,3 @@
-import os
-import re
-import time
-import requests
-from datetime import datetime, timezone, timedelta
-
-# ==========================================
-# 1. CONFIG & SECRETS
-# ==========================================
-FB_TOKEN = os.environ["FB_TELEGRAM_TOKEN"]
-NBA_TOKEN = os.environ["NBA_TELEGRAM_TOKEN"]
-CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-WEBHOOK_URL = os.environ["SHEET_WEBHOOK_URL"]
-
-NBA_SEASON = "2026-27"
-SCAN_INTERVAL_SEC = 50
-MAX_RUNTIME_SEC = 5.8 * 3600  # Clean exit before GitHub's 6h cap
-EET = timezone(timedelta(hours=2))
-
-FB_HEADERS = [
-    "Date", "Time_EET", "Event_ID", "Competition", "Match", "Minute",
-    "Trigger", "Safe_Target_150", "Cutoff_Line", "Why",
-    "Live_Stats", "Final_Stats", "Result"
-]
-
-NBA_HEADERS = [
-    "Date", "Time_EET", "Event_ID", "Tier", "Confidence", "Game",
-    "Trigger", "Player", "Target_Stat", "Projected_Final",
-    "Safe_Target_150", "Cutoff_Line", "Why", "Alert_Stats", "Final_Stats", "Result"
-]
-
-COMPETITIONS = {
-    "uefa.champions": ("UCL", False), "uefa.europa": ("UEL", False),
-    "uefa.europa.conf": ("UECL", False), "eng.1": ("Premier League", False),
-    "esp.1": ("La Liga", False), "ita.1": ("Serie A", False),
-    "ger.1": ("Bundesliga", False), "fra.1": ("Ligue 1", False),
-    "eng.fa": ("FA Cup", True), "eng.league_cup": ("EFL Cup", True),
-    "esp.copa_del_rey": ("Copa del Rey", True), "ita.coppa_italia": ("Coppa Italia", True),
-    "ger.dfb_pokal": ("DFB-Pokal", True), "fra.coupe_de_france": ("Coupe de France", True),
-}
-
-STRICT_REFS = {
-    "mateu lahoz", "gil manzano", "hernandez hernandez", "daniele orsato",
-    "marco guida", "maurizio mariani", "anthony taylor", "michael oliver",
-    "clement turpin", "felix zwayer", "daniel siebert", "istvan kovacs"
-}
-
-# ==========================================
-# 2. TELEGRAM & GOOGLE SHEET HELPERS
-# ==========================================
-def send_tg(token, text):
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"},
-            timeout=10
-        )
-    except Exception as e:
-        print(f"TG error: {e}")
-
-def post_sheet(payload):
-    try:
-        requests.post(WEBHOOK_URL, json=payload, timeout=10)
-    except Exception as e:
-        print(f"Sheet error: {e}")
-
-# ==========================================
-# 3. NBA STARTUP BASELINES
-# ==========================================
 def load_nba_baselines():
     baselines, mults = {}, {}
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -146,6 +77,19 @@ def load_nba_baselines():
 
     print(f"NBA Baselines Ready: {len(baselines)} players | {len(mults)} teams")
     return baselines, mults
+BASELINES, TEAM_MULTS = load_nba_baselines()
+
+def get_baseline(name):
+    key = name.strip().lower()
+    if key in BASELINES:
+        return BASELINES[key]
+    parts = key.split()
+    if parts:
+        for k, v in BASELINES.items():
+            if k.endswith(" " + parts[-1]):
+                return v
+    return None
+
 
 
 # ==========================================

@@ -1,3 +1,9 @@
+import os
+import re
+import time
+import requests
+from datetime import datetime, timezone, timedelta
+
 def load_nba_baselines():
     baselines, mults = {}, {}
     headers = {"User-Agent": "Mozilla/5.0"}
